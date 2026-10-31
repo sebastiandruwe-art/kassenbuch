@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f43c4">
+<meta name="color-scheme" content="light dark">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Kassenbuch</title>
+<style>
+/* Layout: mobile app shell — sticky header with month switcher, one scrolling view, bottom tab bar with a central camera button. */
+:root{
+  --bg:#eef1f5; --paper:#ffffff; --ink:#18202c; --muted:#5b6678; --line:#d5dbe4;
+  --accent:#2f43c4; --on-accent:#ffffff; --accent-soft:#e3e7fb;
+  --ok:#1d7f55; --warn:#b26a00; --bad:#c2332b; --ok-soft:#dff2e8; --warn-soft:#fbefd9; --bad-soft:#fbe3e1;
+  --track:#e3e8ef; --scrim:rgba(12,16,24,.45);
+  --f-body:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-display:"Roboto Condensed","Arial Narrow",Roboto,system-ui,sans-serif;
+  --f-mono:"Roboto Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --nav-h:64px;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#10141b; --paper:#181e28; --ink:#e7ebf2; --muted:#98a3b5; --line:#2b3442;
+  --accent:#8f9dff; --on-accent:#10141b; --accent-soft:#232a4a;
+  --ok:#4fc58d; --warn:#e6a23c; --bad:#f07169; --ok-soft:#173226; --warn-soft:#3a2c13; --bad-soft:#3d1c1a;
+  --track:#252d3a; --scrim:rgba(0,0,0,.6);}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 24px)}
+[hidden]{display:none!important}
+h1,h2,h3{font-family:var(--f-display);margin:0;letter-spacing:-.005em;text-wrap:balance}
+h2{font-size:19px;font-weight:700}
+h3{font-size:16px;font-weight:700}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+.label{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.btn{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:10px 14px;font-weight:500;min-height:44px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.small{padding:6px 10px;font-size:13.5px;min-height:36px}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5}
+.btn.block{width:100%}
+input.f,select.f{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:9px 10px;min-width:0;width:100%;min-height:42px}
+
+header.top{position:sticky;top:0;z-index:5;background:var(--bg);padding:calc(env(safe-area-inset-top,0px) + 10px) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line)}
+header.top h1{font-size:21px;font-weight:800}
+.monthnav{display:flex;align-items:center;gap:4px}
+.monthnav .m{font-family:var(--f-display);font-weight:700;font-size:15.5px;min-width:8.6em;text-align:center}
+.iconbtn{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--paper);display:grid;place-items:center;font-size:20px;line-height:1}
+
+main{max-width:760px;margin:0 auto;padding-block:16px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.view{display:flex;flex-direction:column;gap:22px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px}
+
+.big{font-family:var(--f-mono);font-size:34px;font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums}
+.big small{font-size:15px;color:var(--muted)}
+.meter{height:10px;border-radius:5px;background:var(--track);overflow:hidden}
+.meter i{display:block;height:100%;border-radius:5px;background:var(--ok)}
+.meter.warn i{background:var(--warn)} .meter.bad i{background:var(--bad)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.facts div{display:flex;flex-direction:column;gap:2px}
+.facts b{font-family:var(--f-mono);font-weight:500;font-size:15px;font-variant-numeric:tabular-nums}
+.status{font-size:13.5px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.status.bad{color:var(--bad)} .status.warn{color:var(--warn)} .status.ok{color:var(--ok)}
+.trend svg{width:100%;height:auto;display:block}
+.trend text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+
+.cat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;padding:12px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.cat:last-child{border-bottom:none}
+.cat .name{font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0}
+.cat .amt{font-family:var(--f-mono);font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cat .amt span{color:var(--muted)}
+.cat .meter{grid-column:1/-1;height:7px}
+.cat .note{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.pill{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.none{background:var(--track);color:var(--muted)}
+.sechead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+
+.roll{display:flex;flex-direction:column;gap:16px}
+.rcpt{background:var(--paper);border:1px solid var(--line);border-radius:4px 4px 0 0;padding:14px 14px 22px;font-family:var(--f-mono);font-size:13px;min-width:0;
+  -webkit-mask:radial-gradient(circle 6px at 8px 100%,#0000 98%,#000) -8px 0/16px 100% repeat-x;mask:radial-gradient(circle 6px at 8px 100%,#0000 98%,#000) -8px 0/16px 100% repeat-x}
+.rcpt .hd{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;font-family:var(--f-body)}
+.rcpt .store{font-family:var(--f-display);font-weight:700;font-size:16px;text-transform:uppercase;letter-spacing:.02em;overflow-wrap:anywhere}
+.rcpt .meta{color:var(--muted);font-size:12px}
+.rcpt table{width:100%;border-collapse:collapse;margin-top:8px}
+.rcpt td{padding:3px 0;vertical-align:top}
+.rcpt td.p{text-align:right;white-space:nowrap;padding-left:8px}
+.rcpt td.n{overflow-wrap:anywhere}
+.rcpt .c{display:block;font-family:var(--f-body);font-size:11px;color:var(--muted)}
+.rcpt .tot{border-top:1px dashed var(--line);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:500;font-size:14px}
+.rcpt .foot{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;font-family:var(--f-body);flex-wrap:wrap}
+.rcpt .more{font-family:var(--f-body);font-size:12.5px;color:var(--accent);background:none;border:none;padding:6px 0}
+.empty{color:var(--muted);background:var(--paper);border:1px dashed var(--line);border-radius:12px;padding:22px;text-align:center}
+
+/* bottom nav */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--paper);border-top:1px solid var(--line);padding:0 max(8px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(8px,env(safe-area-inset-left,0px));display:grid;grid-template-columns:1fr 1fr 76px 1fr 1fr;align-items:center;height:calc(var(--nav-h) + env(safe-area-inset-bottom,0px))}
+nav.tabs a{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);text-decoration:none;font-size:11.5px;font-weight:500;padding:8px 0}
+nav.tabs a svg{width:24px;height:24px}
+nav.tabs a[aria-current="page"]{color:var(--accent)}
+.fab{justify-self:center;width:64px;height:64px;border-radius:50%;border:none;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;margin-top:-26px;box-shadow:0 4px 14px rgba(20,30,80,.3)}
+.fab svg{width:30px;height:30px}
+
+/* sheet */
+.sheet{position:fixed;inset:0;z-index:10;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center}
+.sheet .panel{background:var(--paper);width:100%;max-width:760px;max-height:94%;overflow:auto;border-radius:18px 18px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:12px}
+.sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:0 auto}
+.thumb{width:56px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--line);flex:none}
+.items{display:flex;flex-direction:column;gap:10px}
+.item{display:grid;grid-template-columns:minmax(0,1fr) 6.6em 40px;gap:6px;align-items:center;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.item .nm{grid-column:1/-1}
+.item input.price{text-align:right;font-family:var(--f-mono)}
+.item .hint{grid-column:1/-1;font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item .hint.sug{color:var(--warn)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row2 label,.fld{display:flex;flex-direction:column;gap:4px}
+.spin{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.queue{font-size:12.5px;color:var(--muted)}
+
+.bgrid{display:flex;flex-direction:column}
+.bgrid label{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.bgrid input{width:7em;text-align:right;font-family:var(--f-mono)}
+.catrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 16px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:20;max-width:calc(100% - 32px)}
+.note-box{font-size:13.5px;color:var(--muted);line-height:1.5}
+.note-box b{color:var(--ink)}
+.camchoice{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Kassenbuch</h1>
+  <div class="monthnav" id="monthnav">
+    <button class="iconbtn" id="prevM" aria-label="Vorheriger Monat">‹</button>
+    <div class="m" id="monthLabel">–</div>
+    <button class="iconbtn" id="nextM" aria-label="Nächster Monat">›</button>
+  </div>
+</header>
+
+<main>
+  <!-- Übersicht -->
+  <section class="view" id="v-uebersicht">
+    <div class="card">
+      <div class="label">Ausgaben im Monat</div>
+      <div class="big" id="sumSpent">0,00 €</div>
+      <div style="margin:10px 0 6px" class="meter" id="sumMeter"><i style="width:0"></i></div>
+      <div class="status" id="sumStatus">Daten werden geladen…</div>
+      <div class="facts">
+        <div><span class="label">Budget</span><b id="fBudget">–</b></div>
+        <div><span class="label">Übrig</span><b id="fLeft">–</b></div>
+        <div><span class="label">Belege</span><b id="fCount">0</b></div>
+      </div>
+    </div>
+    <div id="setupHint" class="card" hidden>
+      <h3>Noch ein Schritt</h3>
+      <p class="note-box">Zum automatischen Auslesen braucht die App einen Anthropic-API-Schlüssel. Trage ihn unter <b>Einstellungen</b> ein. Ohne Schlüssel kannst du Belege von Hand erfassen.</p>
+      <a class="btn primary" href="#einstellungen" style="text-align:center;text-decoration:none">Zu den Einstellungen</a>
+    </div>
+    <div>
+      <div class="sechead"><h2>Kategorien</h2><a class="btn small" href="#budgets" style="text-decoration:none">Budgets</a></div>
+      <div class="card" style="padding-block:4px" id="cats"></div>
+    </div>
+    <div class="card trend">
+      <div class="label" style="margin-bottom:6px">Letzte 6 Monate</div>
+      <svg id="trend" viewBox="0 0 320 150" role="img" aria-label="Ausgaben der letzten sechs Monate"></svg>
+    </div>
+  </section>
+
+  <!-- Belege -->
+  <section class="view" id="v-belege" hidden>
+    <div class="sechead"><h2>Belege</h2><button class="btn small" id="manualBtn">+ Manuell</button></div>
+    <div id="roll" class="roll"></div>
+  </section>
+
+  <!-- Budgets -->
+  <section class="view" id="v-budgets" hidden>
+    <div>
+      <h2>Monatsbudgets</h2>
+      <p class="note-box" id="budgetInfo"></p>
+    </div>
+    <div class="card"><div class="bgrid" id="bgrid"></div></div>
+    <button class="btn primary block" id="bSave">Budgets speichern</button>
+  </section>
+
+  <!-- Einstellungen -->
+  <section class="view" id="v-einstellungen" hidden>
+    <div class="card" style="display:flex;flex-direction:column;gap:12px">
+      <h2>Auslesen mit Claude</h2>
+      <label class="fld" for="apiKey"><span class="label">Anthropic-API-Schlüssel</span>
+        <input class="f" id="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
+      <label class="fld" for="model"><span class="label">Modell</span>
+        <select class="f" id="model">
+          <option value="claude-opus-5-5">Claude Opus 5.5 – genaueste Erkennung (ca. 3–5 Cent/Bon)</option>
+          <option value="claude-sonnet-5-5">Claude Sonnet 5.5 – ausgewogen (ca. 1–3 Cent/Bon)</option>
+          <option value="claude-haiku-5-5">Claude Haiku 5.5 – am günstigsten (unter 0,5 Cent/Bon)</option>
+        </select></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="saveKey">Speichern</button><button class="btn" id="testKey">Verbindung testen</button></div>
+      <div class="status" id="keyStatus"></div>
+      <p class="note-box">Der Schlüssel bleibt auf diesem Handy und wird nur an api.anthropic.com gesendet. Fotos gehen zum Auslesen an Anthropic, gespeichert wird nur das Ergebnis. Bisherige API-Kosten: <b id="costSum" class="num">0,00 €</b></p>
+    </div>
+
+    <div class="card">
+      <div class="sechead"><h2>Kategorien</h2></div>
+      <p class="note-box">Umbenennen ändert alle bisherigen Positionen mit. Beim Löschen wandern die Positionen nach „Sonstiges“.</p>
+      <div id="catList"></div>
+      <div style="display:flex;gap:8px;margin-top:10px"><input class="f" id="newCat" placeholder="Neue Kategorie, z. B. Garten"><button class="btn" id="addCat">Hinzufügen</button></div>
+    </div>
+
+    <div class="card">
+      <div class="sechead"><h2>Gelernte Zuordnungen</h2><span class="label" id="ruleCount"></span></div>
+      <p class="note-box">Wenn du die Kategorie einer Position änderst, merkt sich die App das und ordnet denselben Artikel beim nächsten Mal direkt so zu.</p>
+      <div id="ruleList"></div>
+    </div>
+
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
+      <h2>Daten sichern</h2>
+      <p class="note-box">Alle Daten liegen nur auf diesem Handy. Mach ab und zu eine Sicherung, z. B. bevor du die Browserdaten löschst oder das Handy wechselst.</p>
+      <button class="btn" id="exportJson">Sicherung speichern (JSON)</button>
+      <button class="btn" id="exportCsv">Alle Positionen als CSV (Excel)</button>
+      <label class="btn" for="importIn" style="text-align:center">Sicherung wiederherstellen</label>
+      <input type="file" id="importIn" accept="application/json,.json" hidden>
+      <div class="status" id="storeStatus"></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Navigation">
+  <a href="#uebersicht" data-tab="uebersicht"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Übersicht</a>
+  <a href="#belege" data-tab="belege"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>Belege</a>
+  <button class="fab" id="fab" aria-label="Kassenzettel fotografieren"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 8h4l2-3h6l2 3h4v12H3z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button>
+  <a href="#budgets" data-tab="budgets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 5"/></svg>Budgets</a>
+  <a href="#einstellungen" data-tab="einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Einstellungen</a>
+</nav>
+
+<input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+<input type="file" id="galIn" accept="image/*" multiple hidden>
+
+<div class="sheet" id="camSheet" hidden>
+  <div class="panel">
+    <div class="grab"></div>
+    <h3>Kassenzettel hinzufügen</h3>
+    <div class="camchoice">
+      <button class="btn primary" id="takePhoto">Foto aufnehmen</button>
+      <button class="btn" id="pickGallery">Aus Galerie</button>
+    </div>
+    <button class="btn ghost" id="manual2">Ohne Foto manuell erfassen</button>
+    <p class="note-box">Tipp: Bon glatt auf einen dunklen Untergrund legen, gutes Licht, den ganzen Bon ins Bild.</p>
+  </div>
+</div>
+
+<div class="sheet" id="reviewSheet" hidden>
+  <div class="panel" id="reviewPanel"></div>
+</div>
+
+<script>
+"use strict";
+const DEFAULT_CATS = ["Lebensmittel","Obst & Gemüse","Fleisch & Fisch","Milchprodukte","Backwaren","Getränke","Süßes & Snacks","Alkohol","Drogerie & Hygiene","Haushalt & Reinigung","Tierbedarf","Baby & Kind","Kleidung","Elektronik","Freizeit","Pfand","Sonstiges"];
+const FALLBACK = "Sonstiges";
+const PRICES = {"claude-opus-5-5":[4,20],"claude-sonnet-5-5":[2,10],"claude-haiku-5-5":[0.1,0.5]}; // USD per 1M tokens
+const USD_EUR = 0.92;
+
+const eur = new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"});
+const fmt = v => eur.format(Math.round((+v||0)*100)/100);
+const monthName = m => { const [y,mo]=m.split("-").map(Number); return new Date(y,mo-1,1).toLocaleDateString("de-DE",{month:"long",year:"numeric"}); };
+const shortMonth = m => { const [y,mo]=m.split("-").map(Number); return new Date(y,mo-1,1).toLocaleDateString("de-DE",{month:"short"}); };
+const addMonth = (m,d) => { const [y,mo]=m.split("-").map(Number); const dt=new Date(y,mo-1+d,1); return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0"); };
+const today = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = id => document.getElementById(id);
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const norm = s => String(s||"").toLowerCase().replace(/\d+([.,]\d+)?\s*(%|g|kg|ml|l|cl|stk|st|x)?\b/g," ").replace(/[^a-zäöüß ]/g," ").replace(/\s+/g," ").trim();
+function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.append(t); setTimeout(()=>t.remove(),2800); }
+
+/* ---------- storage (IndexedDB) ---------- */
+const dbp = new Promise((res,rej)=>{ const r=indexedDB.open("kassenbuch",1);
+  r.onupgradeneeded=()=>{ const d=r.result; d.createObjectStore("receipts",{keyPath:"id"}); d.createObjectStore("kv"); };
+  r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+function req(store,mode,fn){ return dbp.then(d=>new Promise((res,rej)=>{ const t=d.transaction(store,mode); const r=fn(t.objectStore(store)); t.oncomplete=()=>res(r&&"result" in r?r.result:undefined); t.onerror=()=>rej(t.error); t.onabort=()=>rej(t.error); })); }
+const store = {
+  allReceipts: () => req("receipts","readonly",s=>s.getAll()),
+  putReceipt: r => req("receipts","readwrite",s=>s.put(r)),
+  putReceipts: rs => req("receipts","readwrite",s=>{ rs.forEach(r=>s.put(r)); }),
+  delReceipt: id => req("receipts","readwrite",s=>s.delete(id)),
+  get: k => req("kv","readonly",s=>s.get(k)),
+  set: (k,v) => req("kv","readwrite",s=>s.put(v,k)),
+};
+
+let S = { month: today().slice(0,7), receipts:[], budgets:{}, cats:[...DEFAULT_CATS], rules:{}, settings:{apiKey:"",model:"claude-opus-5-5",costUsd:0}, loaded:false, expanded:new Set(), confirmDel:null };
+const saveCats = () => store.set("cats",S.cats);
+const saveRules = () => store.set("rules",S.rules);
+const saveBudgets = () => store.set("budgets",S.budgets);
+const saveSettings = () => store.set("settings",S.settings);
+
+/* ---------- derived ---------- */
+function budgetFor(month){
+  if (S.budgets[month]) return {limits:S.budgets[month], from:month};
+  const keys=Object.keys(S.budgets).sort(); const earlier=keys.filter(k=>k<month);
+  const k = earlier.length?earlier[earlier.length-1]:null;
+  return k?{limits:S.budgets[k],from:k}:{limits:{},from:null};
+}
+const monthReceipts = m => S.receipts.filter(r=>r.month===m).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt-a.createdAt));
+const receiptTotal = r => (r.items||[]).reduce((a,it)=>a+(+it.price||0),0);
+const catOf = c => S.cats.includes(c)?c:FALLBACK;
+function spentByCat(m){ const s={}; for(const r of monthReceipts(m)) for(const it of r.items||[]){ const c=catOf(it.category); s[c]=(s[c]||0)+(+it.price||0);} return s; }
+function level(spent,limit){ if(!limit) return "none"; const p=spent/limit; return p>1?"bad":p>.85?"warn":"ok"; }
+
+/* ---------- routing ---------- */
+const VIEWS=["uebersicht","belege","budgets","einstellungen"];
+function route(){
+  const v = VIEWS.includes(location.hash.slice(1))?location.hash.slice(1):"uebersicht";
+  VIEWS.forEach(x=>$("v-"+x).hidden = x!==v);
+  document.querySelectorAll("nav.tabs a").forEach(a=>{ if(a.dataset.tab===v) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
+  $("monthnav").style.visibility = v==="einstellungen"?"hidden":"visible";
+  render(); window.scrollTo(0,0);
+}
+addEventListener("hashchange",route);
+$("prevM").onclick=()=>{S.month=addMonth(S.month,-1);render();};
+$("nextM").onclick=()=>{S.month=addMonth(S.month,1);render();};
+
+/* ---------- render ---------- */
+function render(){
+  $("monthLabel").textContent=monthName(S.month);
+  renderSummary(); renderCats(); renderTrend(); renderRoll(); renderBudgets(); renderSettings();
+}
+function renderSummary(){
+  const m=S.month, rs=monthReceipts(m), spent=rs.reduce((a,r)=>a+receiptTotal(r),0);
+  const {limits}=budgetFor(m); const tb=Object.values(limits).reduce((a,v)=>a+(+v||0),0);
+  $("sumSpent").innerHTML=esc(fmt(spent))+(tb?` <small>von ${esc(fmt(tb))}</small>`:"");
+  const lv=level(spent,tb), meter=$("sumMeter"); meter.className="meter "+(lv==="none"?"":lv); meter.firstElementChild.style.width=tb?Math.min(100,spent/tb*100)+"%":"0";
+  $("fBudget").textContent=tb?fmt(tb):"–"; $("fLeft").textContent=tb?fmt(tb-spent):"–"; $("fLeft").style.color=tb&&tb-spent<0?"var(--bad)":""; $("fCount").textContent=rs.length;
+  const st=$("sumStatus");
+  if(!S.loaded){ st.className="status"; st.innerHTML='<span class="spin"></span> Daten werden geladen…'; }
+  else if(!tb){ st.className="status"; st.innerHTML='Noch kein Budget. <a href="#budgets">Budgets festlegen</a>'; }
+  else { const p=Math.round(spent/tb*100); st.className="status "+(lv==="ok"?"":lv); st.textContent=lv==="bad"?`Budget um ${fmt(spent-tb)} überschritten (${p} %).`:`${p} % des Monatsbudgets verbraucht.`; }
+  $("setupHint").hidden = !S.loaded || !!S.settings.apiKey;
+}
+function renderCats(){
+  const m=S.month, sp=spentByCat(m), {limits}=budgetFor(m);
+  const used=S.cats.filter(c=>(sp[c]||0)!==0||(+limits[c]||0)>0);
+  used.sort((a,b)=>{ const pa=limits[a]?(sp[a]||0)/limits[a]:-1, pb=limits[b]?(sp[b]||0)/limits[b]:-1; return pb-pa||(sp[b]||0)-(sp[a]||0); });
+  if(!used.length){ $("cats").innerHTML=`<div class="empty" style="border:none">Noch keine Ausgaben in ${esc(monthName(m))}. Tippe unten auf die Kamera und fotografiere deinen ersten Kassenzettel.</div>`; return; }
+  const misc = monthReceipts(m).flatMap(r=>(r.items||[]).filter(it=>catOf(it.category)===FALLBACK));
+  $("cats").innerHTML=used.map(c=>{
+    const s=sp[c]||0,l=+limits[c]||0,lv=level(s,l);
+    const pill=lv==="none"?'<span class="pill none">ohne Budget</span>':lv==="bad"?'<span class="pill bad">überschritten</span>':lv==="warn"?'<span class="pill warn">fast aufgebraucht</span>':'<span class="pill ok">im Rahmen</span>';
+    let note=l?esc(s>l?`${fmt(s-l)} über Budget`:`noch ${fmt(l-s)} frei`):"";
+    if(c===FALLBACK&&misc.length) note=(note?note+" · ":"")+`${misc.length} ${misc.length===1?"Position":"Positionen"} ohne passende Kategorie: ${esc(misc.slice(0,3).map(x=>x.name).join(", "))}${misc.length>3?" …":""}. <a href="#belege">Prüfen</a>`;
+    return `<div class="cat"><div class="name">${esc(c)} ${pill}</div><div class="amt">${esc(fmt(s))}${l?` <span>/ ${esc(fmt(l))}</span>`:""}</div>
+      <div class="meter ${lv==="none"?"":lv}"><i style="width:${l?Math.min(100,Math.max(0,s/l*100)):0}%"></i></div>${note?`<div class="note">${note}</div>`:""}</div>`;
+  }).join("");
+}
+function renderTrend(){
+  const months=[]; for(let i=5;i>=0;i--) months.push(addMonth(S.month,-i));
+  const vals=months.map(m=>monthReceipts(m).reduce((a,r)=>a+receiptTotal(r),0));
+  const buds=months.map(m=>Object.values(budgetFor(m).limits).reduce((a,v)=>a+(+v||0),0));
+  const max=Math.max(1,...vals,...buds);
+  const p=Math.pow(10,Math.floor(Math.log10(max))); let nice=10*p; for(const f of [1,2,2.5,5,10]) if(f*p>=max){nice=f*p;break;}
+  const W=320,H=150,L=44,B=22,T=12,ch=H-B-T,bw=(W-L)/6, y=v=>T+ch-(Math.max(0,v)/nice)*ch;
+  let s="";
+  for(const t of [0,nice/2,nice]) s+=`<line x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${L-6}" y="${y(t)+3}" text-anchor="end">${Math.round(t)} €</text>`;
+  months.forEach((m,i)=>{ const x=L+i*bw+bw*.2,w=bw*.6,cur=m===S.month,lv=level(vals[i],buds[i]);
+    const col=lv==="bad"?"var(--bad)":cur?"var(--accent)":"var(--muted)";
+    s+=`<rect x="${x}" y="${y(vals[i])}" width="${w}" height="${Math.max(0,(Math.max(0,vals[i])/nice)*ch)}" rx="3" fill="${col}" opacity="${cur?1:.45}"><title>${monthName(m)}: ${fmt(vals[i])}</title></rect>`;
+    if(buds[i]) s+=`<line x1="${x-3}" x2="${x+w+3}" y1="${y(buds[i])}" y2="${y(buds[i])}" stroke="var(--ink)" stroke-width="1.5" stroke-dasharray="3 2"/>`;
+    s+=`<text x="${x+w/2}" y="${H-6}" text-anchor="middle" style="${cur?"fill:var(--ink);font-weight:600":""}">${shortMonth(m)}</text>`; });
+  s+=`<text x="${W}" y="${T-3}" text-anchor="end">– – Budget</text>`;
+  $("trend").innerHTML=s;
+}
+function renderRoll(){
+  const rs=monthReceipts(S.month);
+  if(!rs.length){ $("roll").innerHTML=`<div class="empty">Keine Belege in ${esc(monthName(S.month))}.</div>`; return; }
+  $("roll").innerHTML=rs.map(r=>{
+    const exp=S.expanded.has(r.id), items=r.items||[], show=exp?items:items.slice(0,6);
+    const d=r.date?new Date(r.date+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"}):"";
+    const rows=show.map(it=>`<tr><td class="n">${esc(it.name)}<span class="c">${esc(catOf(it.category))}</span></td><td class="p">${esc(fmt(it.price))}</td></tr>`).join("");
+    const del=S.confirmDel===r.id?`<span style="font-size:13px;align-self:center">Wirklich löschen?</span><button class="btn small danger" data-delyes="${r.id}">Löschen</button><button class="btn small" data-delno="1">Abbrechen</button>`
+      :`<button class="btn small ghost" data-del="${r.id}">Löschen</button><button class="btn small" data-edit="${r.id}">Bearbeiten</button>`;
+    return `<article class="rcpt"><div class="hd"><div><div class="store">${esc(r.store||"Unbekannter Laden")}</div><div class="meta">${esc(d)} · ${items.length} Pos.</div></div></div>
+      <table>${rows}</table>${items.length>6?`<button class="more" data-exp="${r.id}">${exp?"Weniger anzeigen":`Alle ${items.length} Positionen anzeigen`}</button>`:""}
+      <div class="tot"><span>SUMME</span><span>${esc(fmt(receiptTotal(r)))}</span></div><div class="foot">${del}</div></article>`;
+  }).join("");
+}
+$("roll").addEventListener("click",async e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  if(b.dataset.exp){ S.expanded.has(b.dataset.exp)?S.expanded.delete(b.dataset.exp):S.expanded.add(b.dataset.exp); renderRoll(); }
+  if(b.dataset.del){ S.confirmDel=b.dataset.del; renderRoll(); }
+  if(b.dataset.delno){ S.confirmDel=null; renderRoll(); }
+  if(b.dataset.delyes){ const id=b.dataset.delyes; S.confirmDel=null; await store.delReceipt(id); S.receipts=S.receipts.filter(r=>r.id!==id); render(); toast("Beleg gelöscht"); }
+  if(b.dataset.edit){ const r=S.receipts.find(x=>x.id===b.dataset.edit); if(r) enqueue({data:structuredClone(r)}); }
+});
+
+function renderBudgets(){
+  const {limits,from}=budgetFor(S.month);
+  $("budgetInfo").textContent=`Für ${monthName(S.month)}${from&&from!==S.month?` (bisher übernommen aus ${monthName(from)})`:""}. Gilt auch für alle folgenden Monate, bis du dort neue Budgets speicherst. Leer lassen = kein Budget.`;
+  const sp=spentByCat(S.month);
+  $("bgrid").innerHTML=S.cats.map((c,i)=>`<label for="b${i}"><span>${esc(c)}<br><span class="label" style="text-transform:none;letter-spacing:0">ausgegeben ${esc(fmt(sp[c]||0))}</span></span><input class="f" id="b${i}" type="number" min="0" step="5" inputmode="decimal" data-c="${esc(c)}" value="${limits[c]?+limits[c]:""}" placeholder="–"></label>`).join("");
+}
+$("bSave").onclick=async()=>{ const lim={}; $("bgrid").querySelectorAll("input[data-c]").forEach(i=>{ const v=parseFloat(i.value.replace(",",".")); if(v>0) lim[i.dataset.c]=v; }); S.budgets[S.month]=lim; await saveBudgets(); render(); toast("Budgets gespeichert"); };
+
+function renderSettings(){
+  if(document.activeElement!==$("apiKey")) $("apiKey").value=S.settings.apiKey||"";
+  $("model").value=S.settings.model;
+  $("costSum").textContent=fmt((S.settings.costUsd||0)*USD_EUR);
+  const counts={}; S.receipts.forEach(r=>(r.items||[]).forEach(it=>{counts[catOf(it.category)]=(counts[catOf(it.category)]||0)+1;}));
+  $("catList").innerHTML=S.cats.map((c,i)=>`<div class="catrow"><input class="f" data-ren="${i}" id="cat${i}" value="${esc(c)}" aria-label="Kategorie ${esc(c)}" ${c===FALLBACK?"disabled":""}><span style="display:flex;gap:4px;align-items:center"><span class="label" style="min-width:3.5em;text-align:right">${counts[c]||0} Pos.</span>${c===FALLBACK?"":`<button class="btn small ghost danger" data-delcat="${i}" aria-label="${esc(c)} löschen">×</button>`}</span></div>`).join("");
+  const rk=Object.keys(S.rules);
+  $("ruleCount").textContent=rk.length?`${rk.length}`:"";
+  $("ruleList").innerHTML=rk.length?rk.slice(-40).reverse().map(k=>`<div class="catrow"><span style="min-width:0;overflow-wrap:anywhere">${esc(k)} → <b>${esc(S.rules[k])}</b></span><button class="btn small ghost" data-delrule="${esc(k)}" aria-label="Zuordnung entfernen">×</button></div>`).join(""):`<p class="note-box">Noch keine. Sie entstehen, sobald du eine Kategorie korrigierst.</p>`;
+}
+$("saveKey").onclick=async()=>{ S.settings.apiKey=$("apiKey").value.trim(); S.settings.model=$("model").value; await saveSettings(); render(); toast("Gespeichert"); };
+$("model").onchange=async()=>{ S.settings.model=$("model").value; await saveSettings(); };
+$("testKey").onclick=async()=>{
+  const k=$("apiKey").value.trim(); const st=$("keyStatus"); if(!k){ st.className="status bad"; st.textContent="Bitte zuerst einen Schlüssel eintragen."; return; }
+  st.className="status"; st.innerHTML='<span class="spin"></span> Teste…';
+  try{ await callClaude(k,$("model").value,[{type:"text",text:"Antworte nur mit OK."}],null,64); st.className="status ok"; st.textContent="Verbindung funktioniert."; S.settings.apiKey=k; S.settings.model=$("model").value; await saveSettings(); }
+  catch(e){ st.className="status bad"; st.textContent=e.message; }
+};
+$("catList").addEventListener("change",async e=>{
+  const i=e.target.dataset.ren; if(i===undefined) return; const old=S.cats[+i], nu=e.target.value.trim();
+  if(!nu||nu===old){ e.target.value=old; return; } if(S.cats.includes(nu)){ toast("Diese Kategorie gibt es schon."); e.target.value=old; return; }
+  await renameCategory(old,nu); toast(`„${old}“ heißt jetzt „${nu}“`);
+});
+$("catList").addEventListener("click",async e=>{ const b=e.target.closest("[data-delcat]"); if(!b) return; const c=S.cats[+b.dataset.delcat]; await renameCategory(c,FALLBACK,true); toast(`„${c}“ gelöscht`); });
+$("ruleList").addEventListener("click",async e=>{ const b=e.target.closest("[data-delrule]"); if(!b) return; delete S.rules[b.dataset.delrule]; await saveRules(); renderSettings(); });
+$("addCat").onclick=async()=>{ const v=$("newCat").value.trim(); if(!v) return; if(S.cats.includes(v)){ toast("Diese Kategorie gibt es schon."); return; } addCategory(v); await saveCats(); $("newCat").value=""; render(); toast(`„${v}“ angelegt`); };
+function addCategory(c){ if(!S.cats.includes(c)) S.cats.splice(S.cats.indexOf(FALLBACK),0,c); }
+async function renameCategory(old,nu,remove){
+  const changed=[]; S.receipts.forEach(r=>{ let ch=false; (r.items||[]).forEach(it=>{ if(it.category===old){it.category=nu;ch=true;} }); if(ch) changed.push(r); });
+  if(changed.length) await store.putReceipts(changed);
+  for(const m in S.budgets){ const b=S.budgets[m]; if(old in b){ if(!remove) b[nu]=b[old]; delete b[old]; } }
+  for(const k in S.rules) if(S.rules[k]===old) { if(remove) delete S.rules[k]; else S.rules[k]=nu; }
+  if(remove) S.cats=S.cats.filter(c=>c!==old); else S.cats[S.cats.indexOf(old)]=nu;
+  await Promise.all([saveCats(),saveBudgets(),saveRules()]); render();
+}
+
+/* ---------- backup ---------- */
+function download(name,text,type){ const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.append(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000); }
+$("exportJson").onclick=()=>{ download(`kassenbuch-sicherung-${today()}.json`,JSON.stringify({app:"kassenbuch",version:1,exportedAt:new Date().toISOString(),receipts:S.receipts,budgets:S.budgets,cats:S.cats,rules:S.rules},null,1),"application/json"); };
+$("exportCsv").onclick=()=>{ const rows=[["Datum","Monat","Geschäft","Artikel","Kategorie","Betrag"]];
+  [...S.receipts].sort((a,b)=>(a.date||"").localeCompare(b.date||"")).forEach(r=>(r.items||[]).forEach(it=>rows.push([r.date,r.month,r.store,it.name,catOf(it.category),(+it.price).toFixed(2).replace(".",",")])));
+  download(`kassenbuch-positionen-${today()}.csv`,"﻿"+rows.map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\r\n"),"text/csv"); };
+$("importIn").onchange=async e=>{ const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  try{ const d=JSON.parse(await f.text()); if(d.app!=="kassenbuch"||!Array.isArray(d.receipts)) throw new Error("Das ist keine Kassenbuch-Sicherung.");
+    await store.putReceipts(d.receipts); S.receipts=[...S.receipts.filter(r=>!d.receipts.some(x=>x.id===r.id)),...d.receipts];
+    S.budgets={...S.budgets,...(d.budgets||{})}; (d.cats||[]).forEach(addCategory); S.rules={...S.rules,...(d.rules||{})};
+    await Promise.all([saveBudgets(),saveCats(),saveRules()]); render(); toast(`${d.receipts.length} Belege wiederhergestellt`);
+  }catch(err){ toast("Wiederherstellen fehlgeschlagen: "+err.message); } };
+
+/* ---------- Claude API ---------- */
+async function callClaude(apiKey,model,content,schema,maxTokens){
+  const body={model,max_tokens:maxTokens||16000,messages:[{role:"user",content}]};
+  if(schema) body.output_config={format:{type:"json_schema",schema}};
+  const useFallback = model!=="claude-haiku-5-5";
+  const send = async withFb => {
+    const headers={"content-type":"application/json","x-api-key":apiKey,"anthropic-version":"2026-10-21","anthropic-dangerous-direct-browser-access":"true"};
+    const b={...body}; if(withFb){ headers["anthropic-beta"]="server-side-fallback-2026-07-01"; b.fallbacks="default"; }
+    return fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers,body:JSON.stringify(b)});
+  };
+  let res;
+  try{ res=await send(useFallback); }catch{ throw new Error("Keine Verbindung zu Anthropic. Prüfe die Internetverbindung."); }
+  if(res.status===400 && useFallback){ const t=await res.clone().text(); if(/fallback/i.test(t)) res=await send(false); }
+  let data={}; try{ data=await res.json(); }catch{}
+  if(!res.ok){
+    const m=data?.error?.message||"";
+    if(res.status===401) throw new Error("Der API-Schlüssel ist ungültig.");
+    if(res.status===403) throw new Error("Der API-Schlüssel hat keine Berechtigung für dieses Modell.");
+    if(res.status===429) throw new Error("Zu viele Anfragen oder Guthaben aufgebraucht. Bitte später erneut versuchen.");
+    if(res.status===529||res.status>=500) throw new Error("Anthropic ist gerade überlastet. Bitte gleich erneut versuchen.");
+    throw new Error(`Fehler ${res.status}: ${m||"unbekannt"}`);
+  }
+  const pr=PRICES[model]||PRICES["claude-opus-5-5"], u=data.usage||{};
+  const usd=((u.input_tokens||0)+(u.cache_creation_input_tokens||0)*1.25+(u.cache_read_input_tokens||0)*.1)/1e6*pr[0]+(u.output_tokens||0)/1e6*pr[1];
+  S.settings.costUsd=(S.settings.costUsd||0)+usd; saveSettings();
+  if(data.stop_reason==="refusal") throw new Error("Claude hat dieses Bild nicht verarbeitet. Bitte ein anderes Foto versuchen oder manuell erfassen.");
+  if(data.stop_reason==="max_tokens") throw new Error("Der Bon war zu lang für eine Antwort. Bitte in zwei Fotos aufteilen.");
+  const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+  return {text,usd};
+}
+function receiptSchema(){
+  return {type:"object",additionalProperties:false,required:["is_receipt","store","date","total","items"],properties:{
+    is_receipt:{type:"boolean"},
+    store:{type:"string"},
+    date:{type:"string",description:"YYYY-MM-DD oder leer"},
+    total:{type:"number",description:"Endsumme laut Bon, 0 wenn nicht lesbar"},
+    items:{type:"array",items:{type:"object",additionalProperties:false,required:["name","price","category","suggested_category"],properties:{
+      name:{type:"string"}, price:{type:"number"}, category:{type:"string",enum:S.cats}, suggested_category:{type:"string"}}}}}};
+}
+function receiptPrompt(){
+  const rules=Object.entries(S.rules).slice(-80).map(([k,v])=>`- ${k} → ${v}`).join("\n");
+  return `Lies diesen deutschen Kassenzettel vollständig aus.
+- Jede gekaufte Position einzeln. "price" ist der Zeilenbetrag in Euro (Menge × Einzelpreis).
+- Rabatte, Coupons und Pfandrückgaben als eigene Position mit negativem Preis; einen Rabatt der Kategorie des rabattierten Artikels zuordnen.
+- Zwischensumme, Summe, MwSt-Aufstellung, Zahlungsart, Rückgeld und Bonuspunkte sind keine Positionen.
+- Abgekürzte Artikelnamen lesbar ausschreiben (z. B. "BIO VOLLM.3,8%" → "Bio Vollmilch 3,8 %").
+- "category" ist eine der vorgegebenen Kategorien. Pfand → "Pfand".
+- Passt eine Position in keine Kategorie wirklich gut, nimm "${FALLBACK}" und schlage in "suggested_category" einen kurzen, allgemeinen Kategorienamen vor (z. B. "Garten", "Schreibwaren", "Apotheke"). Sonst "suggested_category" leer lassen.
+- "date" im Format YYYY-MM-DD, leer wenn nicht lesbar. "total" ist die Endsumme vom Bon.
+- Ist kein Kassenzettel zu sehen: is_receipt=false und items leer.${rules?`\n\nSo hat der Nutzer diese Artikel bisher eingeordnet. Halte dich daran:\n${rules}`:""}`;
+}
+async function toJpegBase64(file){
+  const bmp=await createImageBitmap(file); const max=1800, sc=Math.min(1,max/Math.max(bmp.width,bmp.height));
+  const c=document.createElement("canvas"); c.width=Math.round(bmp.width*sc); c.height=Math.round(bmp.height*sc);
+  c.getContext("2d").drawImage(bmp,0,0,c.width,c.height); bmp.close?.();
+  return c.toDataURL("image/jpeg",.85).split(",")[1];
+}
+async function readReceipt(file){
+  if(!S.settings.apiKey) throw new Error("Kein API-Schlüssel hinterlegt. Trage ihn unter Einstellungen ein oder erfasse den Beleg manuell.");
+  const b64=await toJpegBase64(file);
+  const {text,usd}=await callClaude(S.settings.apiKey,S.settings.model,[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:receiptPrompt()}],receiptSchema(),16000);
+  let j; try{ j=JSON.parse(text); }catch{ throw new Error("Die Antwort war unvollständig. Bitte erneut versuchen."); }
+  if(!j.is_receipt||!Array.isArray(j.items)||!j.items.length) throw new Error("Auf dem Foto wurde kein Kassenzettel erkannt.");
+  const items=j.items.filter(it=>String(it.name||"").trim()).map(it=>{
+    const name=String(it.name).trim(), learned=S.rules[norm(name)];
+    let category=catOf(it.category), suggest=(it.suggested_category||"").trim();
+    if(learned&&S.cats.includes(learned)){ category=learned; suggest=""; return {name,price:Math.round(+it.price*100)/100,category,learned:true}; }
+    if(suggest&&S.cats.includes(suggest)){ category=suggest; suggest=""; }
+    return {name,price:Math.round((+it.price||0)*100)/100,category,suggest:category===FALLBACK?suggest:""};
+  });
+  return {store:j.store||"",date:/^\d{4}-\d{2}-\d{2}$/.test(j.date||"")?j.date:today(),items,total:j.total>0?j.total:null,usd};
+}
+
+/* ---------- capture & review queue ---------- */
+$("fab").onclick=()=>{ $("camSheet").hidden=false; };
+$("camSheet").addEventListener("click",e=>{ if(e.target===$("camSheet")) $("camSheet").hidden=true; });
+$("takePhoto").onclick=()=>{ $("camSheet").hidden=true; $("camIn").click(); };
+$("pickGallery").onclick=()=>{ $("camSheet").hidden=true; $("galIn").click(); };
+$("manual2").onclick=()=>{ $("camSheet").hidden=true; enqueue({data:blankReceipt()}); };
+$("manualBtn").onclick=()=>enqueue({data:blankReceipt()});
+$("camIn").onchange=e=>{ [...e.target.files].forEach(f=>enqueue({file:f})); e.target.value=""; };
+$("galIn").onchange=e=>{ [...e.target.files].forEach(f=>enqueue({file:f})); e.target.value=""; };
+const blankReceipt=()=>({store:"",date:today(),items:[{name:"",price:0,category:S.cats[0]}]});
+
+const queue=[]; // {id,file,url,state:'reading'|'ready'|'error',data,error}
+function enqueue(job){
+  job.id=uid(); job.url=job.file?URL.createObjectURL(job.file):null;
+  if(job.file){ job.state="reading"; startRead(job); } else { job.state="ready"; job.data.items=job.data.items.map(x=>({...x})); }
+  queue.push(job); showReview();
+}
+async function startRead(job){
+  job.state="reading"; job.error=null; showReview();
+  try{ job.data=await readReceipt(job.file); job.state="ready"; }
+  catch(e){ job.state="error"; job.error=e.message; }
+  showReview();
+}
+function closeJob(job){ const i=queue.indexOf(job); if(i>=0) queue.splice(i,1); if(job.url) URL.revokeObjectURL(job.url); showReview(); }
+
+function showReview(){
+  const sheet=$("reviewSheet"), panel=$("reviewPanel");
+  const job=queue[0];
+  if(!job){ sheet.hidden=true; panel.innerHTML=""; return; }
+  sheet.hidden=false;
+  if(panel.dataset.job===job.id && panel.dataset.state===job.state) return; // keep inputs while editing
+  panel.dataset.job=job.id; panel.dataset.state=job.state;
+  const more=queue.length>1?`<div class="queue">Noch ${queue.length-1} weitere${queue.length-1===1?"r Beleg":" Belege"} in der Warteschlange</div>`:"";
+  const head=`<div class="grab"></div><div style="display:flex;gap:12px;align-items:center">${job.url?`<img class="thumb" src="${job.url}" alt="Foto des Kassenzettels">`:""}<div style="min-width:0;flex:1"><h3>${job.data?.id?"Beleg bearbeiten":"Beleg prüfen"}</h3><div class="status" id="rvStatus"></div>${more}</div></div>`;
+  if(job.state==="reading"){ panel.innerHTML=head+`<div class="status"><span class="spin"></span> Claude liest den Kassenzettel…</div><button class="btn ghost" id="rvAbort">Abbrechen</button>`; $("rvAbort").onclick=()=>closeJob(job); return; }
+  if(job.state==="error"){ panel.innerHTML=head+`<div class="status bad">${esc(job.error)}</div><div class="row2"><button class="btn" id="rvRetry">Erneut versuchen</button><button class="btn" id="rvManual">Manuell erfassen</button></div><button class="btn ghost" id="rvDrop">Verwerfen</button>`;
+    $("rvRetry").onclick=()=>startRead(job); $("rvManual").onclick=()=>{ job.data=blankReceipt(); job.state="ready"; showReview(); }; $("rvDrop").onclick=()=>closeJob(job); return; }
+  const m=job.data;
+  const catOpts=sel=>S.cats.map(c=>`<option${c===sel?" selected":""}>${esc(c)}</option>`).join("");
+  panel.innerHTML=head+`
+    <div class="row2"><label for="rvStore"><span class="label">Geschäft</span><input class="f" id="rvStore" value="${esc(m.store)}" placeholder="z. B. REWE"></label>
+    <label for="rvDate"><span class="label">Datum</span><input class="f" type="date" id="rvDate" value="${esc(m.date)}"></label></div>
+    <div class="items" id="rvItems">${m.items.map((it,i)=>`<div class="item">
+      <input class="f nm" data-i="${i}" data-k="name" id="rvn${i}" value="${esc(it.name)}" placeholder="Artikel" aria-label="Artikel">
+      <select class="f" data-i="${i}" data-k="category" id="rvc${i}" aria-label="Kategorie">${catOpts(it.category)}</select>
+      <input class="f price" data-i="${i}" data-k="price" id="rvp${i}" type="number" step="0.01" inputmode="decimal" value="${it.price}" aria-label="Preis">
+      <button class="btn small ghost" data-rm="${i}" aria-label="Position entfernen">×</button>
+      ${it.suggest?`<div class="hint sug">Passt in keine Kategorie. Vorschlag: <b>${esc(it.suggest)}</b> <button class="btn small" data-mk="${i}">Anlegen &amp; zuordnen</button></div>`:it.learned?`<div class="hint">Wie beim letzten Mal zugeordnet</div>`:""}
+    </div>`).join("")}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><button class="btn small" id="rvAdd">+ Position</button><div class="num" style="font-size:16px">Summe <b id="rvSum"></b></div></div>
+    <div class="row2"><button class="btn" id="rvCancel">Verwerfen</button><button class="btn primary" id="rvSave">Speichern</button></div>`;
+  const check=()=>{ const s=m.items.reduce((a,it)=>a+(+it.price||0),0); $("rvSum").textContent=fmt(s); const st=$("rvStatus");
+    if(m.total&&Math.abs(m.total-s)>0.02){ st.className="status warn"; st.textContent=`Positionen ergeben ${fmt(s)}, der Bon sagt ${fmt(m.total)}. Bitte prüfen.`; }
+    else { st.className="status"; st.textContent=`${m.items.length} Positionen${m.total?" · Summe stimmt mit dem Bon überein":""}${m.usd?` · Kosten ca. ${fmt(m.usd*USD_EUR)}`:""}`; } };
+  check();
+  const redraw=()=>{ panel.dataset.state=""; showReview(); };
+  $("rvStore").oninput=e=>m.store=e.target.value;
+  $("rvDate").oninput=e=>m.date=e.target.value;
+  $("rvItems").oninput=e=>{ const t=e.target, it=m.items[+t.dataset.i]; if(!it) return; if(t.dataset.k==="price"){ it.price=parseFloat(t.value)||0; check(); } else if(t.dataset.k==="name") it.name=t.value; };
+  $("rvItems").onchange=e=>{ const t=e.target; if(t.dataset.k!=="category") return; const it=m.items[+t.dataset.i]; it.category=t.value; it.userSet=true; if(it.suggest){ it.suggest=""; redraw(); } };
+  $("rvItems").onclick=async e=>{ const b=e.target.closest("button"); if(!b) return;
+    if(b.dataset.rm!==undefined){ m.items.splice(+b.dataset.rm,1); redraw(); }
+    if(b.dataset.mk!==undefined){ const c=m.items[+b.dataset.mk].suggest; addCategory(c); await saveCats(); m.items.forEach(it=>{ if(it.suggest===c){ it.category=c; it.suggest=""; it.userSet=true; } }); redraw(); render(); toast(`Kategorie „${c}“ angelegt`); } };
+  $("rvAdd").onclick=()=>{ m.items.push({name:"",price:0,category:S.cats[0]}); redraw(); $("rvn"+(m.items.length-1))?.focus(); };
+  $("rvCancel").onclick=()=>closeJob(job);
+  $("rvSave").onclick=async()=>{
+    const items=m.items.filter(it=>String(it.name).trim()).map(it=>({name:String(it.name).trim(),price:Math.round((+it.price||0)*100)/100,category:catOf(it.category),userSet:it.userSet}));
+    const st=$("rvStatus");
+    if(!items.length){ st.className="status bad"; st.textContent="Mindestens eine Position mit Namen eintragen."; return; }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(m.date||"")){ st.className="status bad"; st.textContent="Bitte ein Datum wählen."; return; }
+    let learnedNow=0; items.forEach(it=>{ if(it.userSet){ const k=norm(it.name); if(k&&S.rules[k]!==it.category){ S.rules[k]=it.category; learnedNow++; } } delete it.userSet; });
+    if(learnedNow) await saveRules();
+    const rec={id:m.id||uid(),store:String(m.store||"").trim(),date:m.date,month:m.date.slice(0,7),items,total:Math.round(items.reduce((a,x)=>a+x.price,0)*100)/100,createdAt:m.createdAt||Date.now()};
+    await store.putReceipt(rec);
+    S.receipts=[...S.receipts.filter(r=>r.id!==rec.id),rec]; S.month=rec.month;
+    closeJob(job); render(); toast(`Beleg gespeichert${learnedNow?` · ${learnedNow} Zuordnung${learnedNow===1?"":"en"} gemerkt`:""}`);
+  };
+}
+
+/* ---------- boot ---------- */
+(async()=>{
+  try{
+    const [rs,b,c,r,s]=await Promise.all([store.allReceipts(),store.get("budgets"),store.get("cats"),store.get("rules"),store.get("settings")]);
+    S.receipts=rs||[]; S.budgets=b||{}; if(Array.isArray(c)&&c.length) S.cats=c.includes(FALLBACK)?c:[...c,FALLBACK]; S.rules=r||{}; S.settings={...S.settings,...(s||{})};
+    S.loaded=true;
+  }catch(e){ S.loaded=true; toast("Speicher nicht verfügbar: "+e.message); }
+  route();
+  try{ if(navigator.storage?.persist){ const ok=await navigator.storage.persist(); $("storeStatus").textContent=ok?"Daten sind vor automatischem Löschen durch den Browser geschützt.":"Der Browser kann die Daten bei Speichermangel löschen. Sichere sie regelmäßig."; } }catch{}
+})();
+if("serviceWorker" in navigator && location.protocol!=="file:") navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
